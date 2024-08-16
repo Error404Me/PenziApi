@@ -1,4 +1,10 @@
 import sql from "mssql";
+import cors from "cors";
+import express from "express";
+
+const app = express();
+app.use(cors());
+app.use(express.json());
 
 // Helper function to log query parameters
 const logQueryParameters = (params) => {
@@ -6,42 +12,87 @@ const logQueryParameters = (params) => {
 };
 
 // Send SMS function
-const sendSMS = (to, message) => {
-  console.log(`Sending SMS to ${to}: ${message}`);
+const sendSMS = (message) => {
+  console.log(`Sending SMS: ${message}`);
 };
 
-// Service Activation
-const activateService = (req, res) => {
-  const { from } = req.body;
-  console.log(`Activating service for ${from}`);
-  sendSMS(
-    from,
-    "Welcome to our dating service with 6000 potential dating partners! To register SMS start#name#age#gender#county#town to 22141. E.g., start#John Doe#26#Male#Nakuru#Naivasha"
-  );
-  res.status(200).send("Service activation message sent.");
-};
+// Activate Service
+const activateService = async (req, res) => {
+  const { phoneNumber } = req.body;
 
-// Register user (POST)
-const registerUser = async (req, res) => {
-  console.log("my user");
-  const { from, payload } = req.body;
-  console.log(from, payload);
-  const [command, name, age, gender, county, town] = payload.split("#");
-  console.log(command, name, age, gender, county, town);
-  console.log(`Registering user: ${from} with data: ${payload}`);
-
-  if (command !== "start") {
-    console.log(`Invalid command received: ${command}`);
-    return res.status(400).send("Invalid Command.");
+  // Check if phoneNumber is provided
+  if (!phoneNumber) {
+    console.error("Phone number is missing.");
+    return res.status(400).send("Phone number is missing.");
   }
+
+  // Validate phoneNumber format
+  const phoneRegex = /^(07|01)\d{8}$/;
+  if (!phoneRegex.test(phoneNumber)) {
+    console.error("Invalid phone number format.");
+    return res.status(400).send("Invalid phone number format. Ensure it starts with 07 or 01 and is 10 digits long.");
+  }
+
+  console.log('Received phoneNumber:', phoneNumber);
+
+  try {
+    // Check if the phone number already exists in the database
+    const checkQuery = `SELECT COUNT(*) AS count FROM users WHERE phone = @phone`;
+    const checkRequest = new sql.Request();
+    checkRequest.input("phone", sql.VarChar, phoneNumber);
+    const checkResult = await checkRequest.query(checkQuery);
+    const phoneExists = checkResult.recordset[0].count > 0;
+
+    if (phoneExists) {
+      console.log("Phone number already activated.");
+      res.status(200).send("Your phone number is already activated.");
+    } else {
+      console.log("Activating service");
+      sendSMS(
+        phoneNumber,
+        "Welcome to our dating service with 6000 potential dating partners! To register SMS start#name#age#gender#county#town to 22141. E.g., start#John Doe#26#Male#Nakuru#Naivasha"
+      );
+      res.status(200).send("Welcome to our dating service with 6000 potential dating partners! To register SMS start#name#age#gender#county#town to 22141. E.g., start#John Doe#26#Male#Nakuru#Naivasha");
+    }
+  } catch (err) {
+    console.error("Error during activation:", err);
+    res.status(500).send(`Error during activation: ${err.message}`);
+  }
+};
+
+
+// Register User
+const registerUser = async (req, res) => {
+  console.log("Received request body:", req.body);
+
+  const { payload,phoneNumber } = req.body;
+
+  // Check if 'payload' is undefined or null
+  if (!payload) {
+    console.error("Payload is missing in the request body.");
+    return res.status(400).send("Payload is missing.");
+  }
+
+  console.log(`Payload: ${payload}`);
+  
+  const [command, name, age, gender, county, town] = payload.split("#");
+
+  // Additional validation to ensure the correct number of parameters
+  if (command !== "start" || !name || !age || !gender || !county || !town) {
+    console.error("Invalid payload format.");
+    return res.status(400).send("Invalid payload format.");
+  }
+
+  console.log(command, name, age, gender, county, town);
 
   try {
     const query = `
-      INSERT INTO users (phone, name, age, gender, county, town) 
-      VALUES (@phone, @name, @age, @gender, @county, @town)`;
+      INSERT INTO users (phone,name, age, gender, county, town) 
+      VALUES (@phone,@name, @age, @gender, @county, @town)`;
 
     const request = new sql.Request();
-    request.input("phone", sql.VarChar, from);
+    request.input("phone", sql.VarChar, phoneNumber);
+
     request.input("name", sql.VarChar, name);
     request.input("age", sql.Int, parseInt(age)); 
     request.input("gender", sql.VarChar, gender);
@@ -50,7 +101,7 @@ const registerUser = async (req, res) => {
 
     // Log the query parameters
     logQueryParameters({
-      phone: from,
+      phone: phoneNumber,
       name: name,
       age: age,
       gender: gender,
@@ -62,207 +113,374 @@ const registerUser = async (req, res) => {
 
     console.log(`User ${name} registered successfully.`);
     sendSMS(
-      from,
       "User registered and details request message sent."
     );
-    res
-      .status(200)
-      .send( `Your profile has been created successfully ${name}. SMS details#levelOfEducation#profession#maritalStatus#religion#ethnicity to 22141. E.g., details#diploma#driver#single#christian#mijikenda`);
+    res.status(200).send(`Your profile has been created successfully ${name}. SMS details#levelOfEducation#profession#maritalStatus#religion#ethnicity to 22141. E.g., details#diploma#driver#single#christian#mijikenda`);
   } catch (err) {
-    console.error("Error registering user.");
-    res.status(500).send("Error registering user:", err);
+    console.error("Error registering user:", err);
+    res.status(500).send(`Error registering user: ${err.message}`);
   }
 };
 
-// Details Registration
-// Details Registration
+// Register Details
 const registerDetails = async (req, res) => {
-    const { from, body } = req.body;
-    const [
-      command,
-      levelOfEducation,
-      profession,
-      maritalStatus,
-      religion,
-      ethnicity,
-    ] = body.split("#");
-  
-    console.log(`Registering details for ${from}: ${body}`);
-  
-    if (command !== "details") {
-      console.log("Invalid command.");
-      return res.status(400).send(`Invalid command received: ${command}`);
-    }
-  
-    try {
-      // this one Checks if the user exists
-      const checkQuery = `SELECT COUNT(*) AS count FROM users WHERE phone = @phone`;
-      const checkRequest = new sql.Request();
-      checkRequest.input("phone", sql.VarChar, from);
-      const checkResult = await checkRequest.query(checkQuery);
-      const userExists = checkResult.recordset[0].count > 0;
-  
-      if (!userExists) {
-        console.log("User does not exist.");
-        return res.status(400).send(`User with phone number ${from} does not exist.`);
-      }
-  
-      // Update user details
-      const query = `
-        UPDATE users 
-        SET level_of_education = @levelOfEducation, 
-            profession = @profession, 
-            marital_status = @maritalStatus, 
-            religion = @religion, 
-            ethnicity = @ethnicity 
-        WHERE phone = @phone`;
-  
-      const request = new sql.Request();
-      request.input("levelOfEducation", sql.VarChar, levelOfEducation);
-      request.input("profession", sql.VarChar, profession);
-      request.input("maritalStatus", sql.VarChar, maritalStatus);
-      request.input("religion", sql.VarChar, religion);
-      request.input("ethnicity", sql.VarChar, ethnicity);
-      request.input("phone", sql.VarChar, from);
-  
-      // Log the query parameters
-      logQueryParameters({
-        levelOfEducation: levelOfEducation,
-        profession: profession,
-        maritalStatus: maritalStatus,
-        religion: religion,
-        ethnicity: ethnicity,
-        phone: from,
-      });
-  
-      await request.query(query);
-  
-      console.log(`Details for ${from} updated successfully.`);
-      sendSMS(
-        from,
-        "Details registered and self-description request message sent."
-      );
-      res
-        .status(200)
-        .send( "This is the last stage of registration. SMS a brief description of yourself to 22141 starting with the word MYSELF. E.g., MYSELF chocolate, lovely, sexy etc.");
-    } catch (err) {
-      console.error("Error updating details.");
-      res.status(500).send("Error updating details:", err);
-    }
-  };
-  
+  const { payload, phoneNumber } = req.body; // Extract payload and phoneNumber from request body
+  const [
+    command,
+    levelOfEducation,
+    profession,
+    maritalStatus,
+    religion,
+    ethnicity,
+  ] = payload.split("#");
 
-// Self-Description Registration
-const registerSelfDescription = async (req, res) => {
-  const { from, body } = req.body;
-  const [command, description] = body.split("#");
+  console.log(`Registering details: ${payload}`);
 
-  console.log(`Registering self-description for ${from}: ${body}`);
-
-  if (command !== "MYSELF") {
+  if (command !== "details") {
     console.log("Invalid command.");
     return res.status(400).send(`Invalid command received: ${command}`);
   }
 
   try {
+    // Check if the user exists
+    const checkQuery = `SELECT COUNT(*) AS count FROM users WHERE phone = @phoneNumber`;
+    const checkRequest = new sql.Request();
+    checkRequest.input("phoneNumber", sql.VarChar, phoneNumber); // Use phoneNumber to check user existence
+    const checkResult = await checkRequest.query(checkQuery);
+    const userExists = checkResult.recordset[0].count > 0;
+
+    if (!userExists) {
+      console.log("User does not exist.");
+      return res.status(400).send("No user found.");
+    }
+
+    // Update user details
+    const query = `
+      UPDATE users 
+      SET level_of_education = @levelOfEducation, 
+          profession = @profession, 
+          marital_status = @maritalStatus, 
+          religion = @religion, 
+          ethnicity = @ethnicity 
+      WHERE phone = @phoneNumber`;
+
+    const request = new sql.Request();
+    request.input("levelOfEducation", sql.VarChar, levelOfEducation);
+    request.input("profession", sql.VarChar, profession);
+    request.input("maritalStatus", sql.VarChar, maritalStatus);
+    request.input("religion", sql.VarChar, religion);
+    request.input("ethnicity", sql.VarChar, ethnicity);
+    request.input("phoneNumber", sql.VarChar, phoneNumber); // Add phoneNumber input
+
+    // Log the query parameters
+    logQueryParameters({
+      levelOfEducation: levelOfEducation,
+      profession: profession,
+      maritalStatus: maritalStatus,
+      religion: religion,
+      ethnicity: ethnicity,
+      phoneNumber: phoneNumber, // Log phoneNumber
+    });
+
+    await request.query(query);
+
+    console.log("Details updated successfully.");
+    sendSMS(
+      "Details registered and self-description request message sent."
+    );
+    res.status(200).send("This is the last stage of registration. SMS a brief description of yourself to 22141 starting with the word MYSELF. E.g., MYSELF#chocolate, lovely, sexy etc.");
+  } catch (err) {
+    console.error("Error updating details:", err);
+    res.status(500).send(`Error updating details: ${err.message}`);
+  }
+};
+
+// Register Self-Description
+const registerSelfDescription = async (req, res) => {
+  const { payload, phoneNumber } = req.body;
+
+  // Ensure 'payload' and 'phoneNumber' are provided
+  if (!payload || !phoneNumber) {
+    console.error("Missing payload or phone number.");
+    return res.status(400).send("Payload or phone number is missing.");
+  }
+
+  // Parse the payload
+  const parts = payload.split("#");
+  
+  if (parts.length !== 2) {
+    console.error("Invalid payload format.");
+    return res.status(400).send("Invalid payload format. Expected format: MYSELF#description");
+  }
+
+  const [command, description] = parts;
+
+  console.log(`Registering self-description: ${payload}`);
+
+  if (command !== "MYSELF") {
+    console.error(`Invalid command received: ${command}`);
+    return res.status(400).send(`Invalid command received: ${command}. Expected 'MYSELF'.`);
+  }
+
+  try {
     const request = new sql.Request();
     request.input("description", sql.VarChar, description);
-    request.input("phone", sql.VarChar, from);
+    request.input("phoneNumber", sql.VarChar, phoneNumber);
 
     // Log the query parameters
     logQueryParameters({
       description: description,
-      phone: from,
+      phoneNumber: phoneNumber,
     });
 
     const query = `
-            UPDATE users 
-            SET description = @description 
-            WHERE phone = @phone`;
+      UPDATE users 
+      SET description = @description 
+      WHERE phone = @phoneNumber`;
 
     await request.query(query);
 
-    console.log(`Self-description for ${from} updated successfully.`);
+    console.log("Self-description updated successfully.");
+
+    // Send confirmation SMS
     sendSMS(
-      from,
-      "Self-description received and matching request message sent."
+      "Self-description registered successfully. To search for a MPENZI, SMS match#age#town to 22141."
+
     );
-    res
-      .status(200)
-      .send("You are now registered for dating. To search for a MPENZI, SMS match#age#town to 22141 and meet the person of your dreams. E.g., match#23-25#Kisumu");
+
+    res.status(200).send( "You are now registered for dating. To search for a MPENZI, SMS match#age#town to 22141 and meet the person of your dreams. E.g., match#23-25#Kisumu");
   } catch (err) {
-    console.error("Error updating description.");
-    res.status(500).send("Error updating description:", err);
+    console.error("Error updating self-description:", err);
+    res.status(500).send(`Error updating self-description: ${err.message}`);
   }
 };
+
+
 
 // Handle Matching Request
-const handleMatchingRequest = (req, res) => {
-  const { from, body } = req.body;
-  const [command, ageRange, town] = body.split("#");
+const handleMatchingRequest = async (req, res) => {
+  const { payload } = req.body;
 
-  console.log(`Handling matching request for ${from}: ${body}`);
+  // Ensure payload is provided
+  if (!payload) {
+    console.error("Payload is missing.");
+    return res.status(400).send("Payload is missing.");
+  }
 
+  // Split payload into parts
+  const parts = payload.split("#");
+  if (parts.length !== 3) {
+    console.error("Invalid payload format.");
+    return res.status(400).send("Invalid payload format. Expected format: match#ageRange#town");
+  }
+
+  const [command, ageRange, town] = parts;
+
+  // Validate command
   if (command !== "match") {
-    console.log("Invalid command.");
-    return res.status(400).send(`Invalid command received: ${command}`);
+    console.error(`Invalid command received: ${command}`);
+    return res.status(400).send(`Invalid command received: ${command}. Expected 'match'.`);
   }
 
-  // Simulate fetching matches
-  sendSMS(
-    from,
-    "Matching request processed."
-  );
-  res.status(200).send( "We have 32 ladies who match your choice! We will send you details of 3 of them shortly. To get more details about a lady, SMS her number e.g., 0722010203 to 22141");
-};
+  // Validate and parse age range
+  const [minAge, maxAge] = ageRange.split("-");
+  if (!minAge || !maxAge || isNaN(minAge) || isNaN(maxAge)) {
+    console.error("Invalid age range format.");
+    return res.status(400).send("Invalid age range format. Expected format: minAge-maxAge");
+  }
 
+  try {
+    // Fetch initial matches
+    const query = `
+      SELECT TOP 3 name, age
+      FROM users
+      WHERE age BETWEEN @minAge AND @maxAge
+        AND town = @town
+      ORDER BY NEWID(); -- Randomize results if needed
+    `;
+
+    const request = new sql.Request();
+    request.input("minAge", sql.Int, parseInt(minAge));
+    request.input("maxAge", sql.Int, parseInt(maxAge));
+    request.input("town", sql.VarChar, town);
+
+    const result = await request.query(query);
+    const matches = result.recordset;
+
+    if (matches.length === 0) {
+      console.log("No matches found.");
+      return res.status(200).send("No matches found for the given criteria.");
+    }
+
+    // Construct SMS message with match details
+    const message = `
+      We have ${matches.length} matches for you! Here are the details of 3 of them:
+      ${matches.map(match => `${match.name} aged ${match.age}.`).join("\n")}
+      Send NEXT to 22141 to receive details of more matches.
+    `;
+
+    // Send SMS with match details
+    sendSMS(message);
+    res.status(200).send(message);
+  } catch (err) {
+    console.error("Error fetching matching users:", err);
+    res.status(500).send(`Error fetching matching users: ${err.message}`);
+  }
+};
 // Handle Subsequent Details
-const handleSubsequentDetails = (req, res) => {
-  const { from, body } = req.body;
-  const [command, number] = body.split("#");
+const handleSubsequentDetails = async (req, res) => {
+  const { payload } = req.body; // Extract payload from request body
+  const [command, page] = payload.split("#"); // Assume page is passed to determine offset
 
-  console.log(`Handling subsequent details request for ${from}: ${body}`);
-
-  if (command !== "NEXT" && command !== "DESCRIBE") {
-    console.log("Invalid command.");
+  if (command !== "NEXT") {
     return res.status(400).send(`Invalid command received: ${command}`);
   }
 
-  if (command === "NEXT") {
-    sendSMS(
-      from,
-      "Pamela Nafula aged 26, 0722040506. Maria Mwende aged 28, 0702556677. Keziah Cheptab, aged 28 0708990011. Send NEXT to 22141 to receive details of the remaining 26 ladies"
-    );
-  } else if (command === "DESCRIBE") {
-    sendSMS(
-      from,
-      "Subsequent details processed."
-    );
-  }
+  // Default page size and page number
+  const pageSize = 3; // Number of results per page
+  const pageNumber = parseInt(page, 10) || 1; // Page number, defaults to 1
 
-  res.status(200).send("Maria Mwende aged 28, Nairobi County, Kasarani town, Graduate, Nurse, single, Christian, Kamba. Send DESCRIBE 0702556677 to get more details about Maria.");
+  // Calculate offset
+  const offset = (pageNumber - 1) * pageSize;
+
+  try {
+    // Fetch subsequent matches with dynamic pagination
+    const query = `
+      SELECT name, age
+      FROM users
+      WHERE age BETWEEN @minAge AND @maxAge
+        AND town = @town
+      ORDER BY name
+      OFFSET @offset ROWS
+      FETCH NEXT @fetch ROWS ONLY;
+    `;
+
+    const request = new sql.Request();
+    request.input("minAge", sql.Int, 23); 
+    request.input("maxAge", sql.Int, 25); 
+    request.input("town", sql.VarChar, "Kisumu"); 
+    request.input("offset", sql.Int, offset); // Dynamic offset
+    request.input("fetch", sql.Int, pageSize); // Fetch the number of results per page
+
+    const result = await request.query(query);
+    const matches = result.recordset;
+
+    // Check if there are no more matches to show
+    if (matches.length === 0) {
+      const message = "No more matches available.";
+      sendSMS(message);
+      return res.status(200).send(message);
+    }
+
+    // Send SMS with match details
+    const message = `
+      ${matches.map(match => `${match.name} aged ${match.age}.`).join("\n")}
+      Send NEXT to 22141 to receive details of more matches.
+    `;
+
+    sendSMS(message);
+    res.status(200).send(message);
+  } catch (err) {
+    console.error("Error fetching subsequent users:", err);
+    res.status(500).send(`Error fetching subsequent users: ${err.message}`);
+  }
 };
+
+
 
 // Handle User Confirmation
-const handleUserConfirmation = (req, res) => {
-  const { from, body } = req.body;
-  const [command, number] = body.split("#");
+const handleUserConfirmation = async (req, res) => {
+  const { payload } = req.body;
+  const [command, phoneNumber] = payload.split("#"); // Expecting phoneNumber in the payload for user identification
 
-  console.log(`Handling user confirmation for ${from}: ${body}`);
+  console.log(`Handling user confirmation: ${payload}`);
 
   if (command !== "YES") {
     console.log("Invalid command.");
     return res.status(400).send(`Invalid command received: ${command}`);
   }
 
-  // Simulate user details response
-  sendSMS(
-    from,
-    "User confirmation processed."
-  );
-  res.status(200).send( "Jamal Jalang’o aged 29, Mombasa County, Bamburi town, Graduate, Accountant, divorced, Muslim, Somali. Send DESCRIBE 0722445566 to get more details about Jamal.");
+  try {
+    // Fetch user details from the database
+    const query = `
+      SELECT name, age, county, town, level_of_education, profession, marital_status, religion, ethnicity
+      FROM users
+      WHERE phone = @phoneNumber
+    `;
+
+    const request = new sql.Request();
+    request.input("phoneNumber", sql.VarChar, phoneNumber);
+
+    const result = await request.query(query);
+    const user = result.recordset[0];
+
+    if (!user) {
+      console.log("User not found.");
+      return res.status(404).send("User not found.");
+    }
+
+    // Format the user information
+    const userInfo = `
+      ${user.name} aged ${user.age}, ${user.county}, ${user.town}
+      Level of Education: ${user.level_of_education}
+      Profession: ${user.profession}
+      Marital Status: ${user.marital_status}
+      Religion: ${user.religion}
+      Ethnicity: ${user.ethnicity}
+    `;
+
+    // Send SMS with user details
+    const smsMessage = `
+      User confirmation processed.
+      ${userInfo}
+      Send DESCRIBE to get more details about ${user.name}.
+    `;
+
+    sendSMS(smsMessage);
+
+    // Send response
+    res.status(200).send(smsMessage);
+  } catch (err) {
+    console.error("Error handling user confirmation:", err);
+    res.status(500).send(`Error handling user confirmation: ${err.message}`);
+  }
 };
 
+// Fetch messages
+const fetchMessages = async (req, res) => {
+  try {
+    // Example messages; replace with actual database logic
+    const messages = [
+      { text: 'Welcome to the dating service!', sender: 'Onfon' },
+      // Add more example messages or fetch from database
+    ];
+    res.status(200).json(messages);
+  } catch (error) {
+    console.error('Error fetching messages:', error);
+    res.status(500).send('Error fetching messages');
+  }
+};
+
+// Send message
+const sendMessage = async (req, res) => {
+  const { text } = req.body;
+
+  try {
+    let response = 'Message received';
+
+    // Example logic; replace with actual message handling
+    if (text.startsWith('match')) {
+      response = 'Matching request processed.';
+    } else if (text.startsWith('NEXT')) {
+      response = 'Here are more details...';
+    }
+
+    res.status(200).json({ response });
+  } catch (error) {
+    console.error('Error sending message:', error);
+    res.status(500).send('Error sending message');
+  }
+};
 // Export functions
 export {
   activateService,
@@ -272,4 +490,6 @@ export {
   handleMatchingRequest,
   handleSubsequentDetails,
   handleUserConfirmation,
+  fetchMessages,
+  sendMessage
 };

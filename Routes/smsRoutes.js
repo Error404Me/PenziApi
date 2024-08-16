@@ -6,7 +6,9 @@ import {
     registerSelfDescription,
     handleMatchingRequest,
     handleSubsequentDetails,
-    handleUserConfirmation
+    handleUserConfirmation,
+    fetchMessages,
+    sendMessage
 } from '../Controllers/smsContoller.js';
 
 const router = express.Router();
@@ -31,6 +33,11 @@ router.post('/next', handleSubsequentDetails);
 
 // User confirmation route
 router.post('/confirm', handleUserConfirmation);
+// Fetch messages route
+router.get('/messages', fetchMessages);
+
+// Send message route
+router.post('/send', sendMessage);
 
 export default (app) => {
     app.use('/api/sms', router);

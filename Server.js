@@ -1,10 +1,18 @@
 import express from 'express';
 import bodyParser from 'body-parser';
 import sql from 'mssql';
+import cors from 'cors';  // Import the cors package
 import smsRoutes from './Routes/smsRoutes.js';
 import db from './Config/db.js'; // Adjust the path to match your actual file location
 
 const app = express();
+
+// Middleware to handle CORS
+app.use(cors({
+    origin: 'http://localhost:3000', // Replace with your frontend URL if different
+    methods: ['GET', 'POST', 'PUT', 'DELETE'], // Adjust methods as needed
+    allowedHeaders: ['Content-Type', 'Authorization'], // Adjust headers as needed
+}));
 
 // Middleware
 app.use(bodyParser.json());
