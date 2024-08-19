@@ -5,6 +5,16 @@ import express from "express";
 const app = express();
 app.use(cors());
 app.use(express.json());
+// List of valid counties
+const validCounties = [
+  "Bomet", "Bungoma", "Busia", "Elgeyo Marakwet", "Embu", "Garissa", "Homa Bay",
+  "Isiolo", "Kajiado", "Kakamega", "Kericho", "Kisii", "Kisumu", "Kitui", "Kwale",
+  "Laikipia", "Lamu", "Machakos", "Makueni", "Mandera", "Marsabit", "Meru",
+  "Migori", "Mombasa", "Murang'a", "Nairobi", "Nakuru", "Nandi", "Narok", "Narus",
+  "Nyamira", "Nyandarua", "Nyeri", "Samburu", "Siaya", "Taita Taveta", "Tana River",
+  "Tharaka Nithi", "Trans Nzoia", "Turkana", "Uasin Gishu", "Vihiga", "Wajir",
+  "West Pokot", "Wote"
+];
 
 // Helper function to log query parameters
 const logQueryParameters = (params) => {
@@ -451,7 +461,7 @@ const fetchMessages = async (req, res) => {
   try {
     // Example messages; replace with actual database logic
     const messages = [
-      { text: 'Welcome to the dating service!', sender: 'Onfon' },
+      { text: 'Congratulations👏Welcome To Our Dating Service! Please enter your phone number, ensuring it starts with 07 or 01 and is exactly 10 digits long e.g., 0712345678 or 0112345678 To Get Started' , sender: 'Onfon' },
       // Add more example messages or fetch from database
     ];
     res.status(200).json(messages);
